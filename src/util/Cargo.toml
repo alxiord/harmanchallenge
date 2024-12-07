@@ -1,11 +1,10 @@
 [package]
-name = "harmanchallenge"
+name = "util"
 version = "0.1.0"
 edition = "2021"
 authors = ["Alexandra Iordache <alexandra.iordache@gmail.com>"]
 license = "Apache-2.0"
 
-[dependencies]
-clap = { version = "4.5.23", features = ["derive"] }
+[lib]
 
-util = { path = "src/util" }
+[dependencies]

@@ -1,4 +1,8 @@
-use clap::{builder::NonEmptyStringValueParser, Arg, ArgAction, Command};
+use std::path::PathBuf;
+
+use clap::{builder::ValueParser, Arg, ArgAction, Command};
+
+use util::validator;
 
 fn main() {
     println!("Hello, world!");
@@ -8,7 +12,7 @@ fn main() {
             Arg::new("input")
                 .short('i')
                 .required(true)
-                .value_parser(NonEmptyStringValueParser::new())
+                .value_parser(ValueParser::new(validator::parse_fname))
                 .action(ArgAction::Set),
         )
         .arg(
@@ -35,7 +39,7 @@ fn main() {
     let matches = cmd.get_matches();
 
     // Safe to unwrap here - if some of the required args are missing, it doesn't make sense for the program to run
-    let infile = matches.get_one::<String>("input").unwrap();
+    let infile = matches.get_one::<PathBuf>("input").unwrap();
     let format = matches.get_one::<String>("format").unwrap();
     let width = matches.get_one::<u32>("width").unwrap_or(&0);
     let height = matches.get_one::<u32>("height").unwrap_or(&0);
@@ -43,7 +47,12 @@ fn main() {
     let flip = matches.contains_id("flip");
 
     println!(
-        "Input file: {}\nFormat: {}\nW: {} H: {}\nInvert {}\nFlip {}",
-        infile, format, width, height, invert, flip
+        "Input file: {:?}\nFormat: {}\nW: {} H: {}\nInvert {}\nFlip {}",
+        infile.as_os_str(),
+        format,
+        width,
+        height,
+        invert,
+        flip
     );
 }
