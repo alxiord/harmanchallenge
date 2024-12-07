@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::{builder::ValueParser, Arg, ArgAction, Command};
 
 use util::{validator, VideoFormat};
-use video::gst;
+use video::{gst, Decoder};
 
 fn main() {
     println!("Hello, world!");
@@ -57,4 +57,7 @@ fn main() {
         invert,
         flip
     );
+
+    let decoder = gst::GstreamerDecoder::new().unwrap();
+    decoder.borrow_mut().build().unwrap();
 }

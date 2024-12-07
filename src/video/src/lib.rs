@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fmt::{self, Display};
 use std::{rc::Rc, result::Result};
 
@@ -17,6 +18,6 @@ impl Display for Error {
 }
 
 pub trait Decoder {
-    fn new() -> Result<Rc<Self>, Error>;
+    fn new() -> Result<Rc<RefCell<Self>>, Error>;
     fn build(&mut self) -> Result<(), Error>;
 }
