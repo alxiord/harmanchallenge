@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::{builder::ValueParser, Arg, ArgAction, Command};
 
 use util::{validator, VideoFormat};
+use video::gst;
 
 fn main() {
     println!("Hello, world!");
@@ -42,13 +43,13 @@ fn main() {
     // Safe to unwrap here - if some of the required args are missing, it doesn't make sense for the program to run
     let infile = matches.get_one::<PathBuf>("input").unwrap();
     let format = matches.get_one::<VideoFormat>("format").unwrap();
-    let width = matches.get_one::<u32>("width").unwrap_or(&0);
-    let height = matches.get_one::<u32>("height").unwrap_or(&0);
+    let width = matches.get_one::<u32>("width");
+    let height = matches.get_one::<u32>("height");
     let invert = matches.contains_id("invert");
     let flip = matches.contains_id("flip");
 
     println!(
-        "Input file: {:?}\nFormat: {}\nW: {} H: {}\nInvert {}\nFlip {}",
+        "Input file: {:?}\nFormat: {}\nW: {:?} H: {:?}\nInvert {}\nFlip {}",
         infile.as_os_str(),
         format,
         width,

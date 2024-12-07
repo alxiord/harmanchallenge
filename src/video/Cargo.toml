@@ -1,0 +1,11 @@
+[package]
+name = "video"
+version = "0.1.0"
+edition = "2021"
+authors = ["Alexandra Iordache <alexandra.iordache@gmail.com>"]
+license = "Apache-2.0"
+
+[lib]
+
+[dependencies]
+gstreamer = "0.23.3"

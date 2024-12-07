@@ -9,3 +9,4 @@ license = "Apache-2.0"
 clap = { version = "4.5.23", features = ["derive"] }
 
 util = { path = "src/util" }
+video = { path = "src/video" }
