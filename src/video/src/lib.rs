@@ -18,4 +18,5 @@ impl Display for Error {
 
 pub trait Decoder {
     fn new() -> Result<Rc<Self>, Error>;
+    fn build(&mut self) -> Result<(), Error>;
 }
