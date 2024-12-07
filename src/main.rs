@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{builder::ValueParser, Arg, ArgAction, Command};
 
-use util::validator;
+use util::{validator, VideoFormat};
 
 fn main() {
     println!("Hello, world!");
@@ -18,6 +18,7 @@ fn main() {
         .arg(
             Arg::new("format")
                 .default_value("h264")
+                .value_parser(ValueParser::new(validator::parse_format))
                 .action(ArgAction::Set),
         )
         .arg(
@@ -40,7 +41,7 @@ fn main() {
 
     // Safe to unwrap here - if some of the required args are missing, it doesn't make sense for the program to run
     let infile = matches.get_one::<PathBuf>("input").unwrap();
-    let format = matches.get_one::<String>("format").unwrap();
+    let format = matches.get_one::<VideoFormat>("format").unwrap();
     let width = matches.get_one::<u32>("width").unwrap_or(&0);
     let height = matches.get_one::<u32>("height").unwrap_or(&0);
     let invert = matches.contains_id("invert");

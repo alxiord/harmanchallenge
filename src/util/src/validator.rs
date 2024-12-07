@@ -19,8 +19,15 @@ pub fn parse_fname(fnamestr: &str) -> Result<PathBuf, Error> {
     if fmeta.permissions().mode() >= 0o600 {
         return Ok(fname);
     }
-    return Err(Error::Io(io::Error::new(
+    Err(Error::Io(io::Error::new(
         io::ErrorKind::PermissionDenied,
         "File not readable",
-    )));
+    )))
+}
+
+pub fn parse_format(format: &str) -> Result<super::VideoFormat, Error> {
+    if format.eq_ignore_ascii_case("h264") {
+        return Ok(super::VideoFormat::H264);
+    }
+    Err(super::Error::Format(format.to_string()))
 }
