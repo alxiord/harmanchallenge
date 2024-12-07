@@ -28,3 +28,16 @@
     gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
     gstreamer1.0-libav libgstrtspserver-1.0-dev libges-1.0-dev
   ```
+
+## Build with Docker
+
+```bash
+docker run -it -v $PWD:/home/alexandra harmanchallenge:v3 bash
+```
+
+and inside the container
+
+```bash
+cargo build
+cargo run -- -i input/hello.mp4
+```
