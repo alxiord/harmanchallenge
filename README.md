@@ -14,20 +14,50 @@
 
 ## Brain dump
 
-- use `ffmpeg` FFI initially, let `ffmpeg` do the heavy lifting and safely wrap it wherever possible in nice Rust code
+- use `gstreamer`
 - dockerize
-- check in with team and, if necessary, do v2 rewriting the `ffmpeg` black magic in Rust
+- add `ffmpeg` if there's time
 
-## Dependencies
+## gstreamer
 
-- gstreamer:
+### Extra dependencies
 
-  ```bash
-  apt-get install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-    gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-    gstreamer1.0-libav libgstrtspserver-1.0-dev libges-1.0-dev
-  ```
+```bash
+apt-get install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-qt5 gstreamer1.0-pulseaudio
+```
+
+Pipeline to just view the video:
+
+```bash
+gst-launch-1.0 -v filesrc location=input/hello.mp4 ! qtdemux ! h264parse ! avdec_h264 ! videoconvert ! xvimagesink
+
+# UPDATE SIMPLIFIED
+gst-launch-1.0 -v filesrc location=input/hello.mp4 ! decodebin ! xvimagesink
+```
+
+To flip:
+
+```bash
+// ... videoflip method=horizontal-flip !  xvimagesink
+```
+
+To invert (xray actually):
+
+```bash
+gst-launch-1.0 filesrc location=input/hello.mp4 ! qtdemux name=demux demux.video_0 ! avdec_h264 ! videoconvert ! coloreffects preset=3 ! videoconvert ! videoflip method=horizontal-flip ! xvimagesink
+```
+
+To resize:
+
+```bash
+gst-launch-1.0 filesrc location=input/hello.mp4 ! qtdemux name=demux   demux.video_0 ! avdec_h264 ! videoconvert ! coloreffects preset=3 ! videoconvert ! videoscale ! video/x-raw,width=600,height=400 ! videoflip method=horizontal-flip ! xvimagesink
+```
+
+- to apply coloreffect: add `coloreffects preset=3 ! videoconvert` after first `videoconvert`
+- to flip: add `videoflip method=horizontal-flip !` after last `videoconvert`
+- to resize: add `videoscale ! video/x-raw,width=600,height=400` after last `videoconvert`
+
+BUT - to add h264 encoding but **not** save to file: don't know how to do this
 
 ## Build with Docker
 
