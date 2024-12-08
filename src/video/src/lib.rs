@@ -1,19 +1,20 @@
-use std::cell::RefCell;
 use std::fmt::{self, Display};
+use std::result::Result;
 use std::sync::{Arc, Mutex};
-use std::{rc::Rc, result::Result};
 
 pub mod gst;
 
 #[derive(Debug)]
 pub enum Error {
     Gstreamer(gst::Error),
+    PoisonedLock,
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::Gstreamer(e) => write!(f, "Gstreamer error: {}", e),
+            Error::PoisonedLock => write!(f, "Mutex poisoned"),
         }
     }
 }
@@ -38,6 +39,7 @@ impl Default for DecoderOptions {
 }
 
 pub trait Decoder {
-    fn new() -> Result<Arc<Mutex<Self>>, Error>;
+    fn new(infname: &str) -> Result<Arc<Mutex<Self>>, Error>;
     fn build(self_rc: Arc<Mutex<Self>>, opts: DecoderOptions) -> Result<(), Error>;
+    fn run(&mut self) -> Result<(), Error>;
 }

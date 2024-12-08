@@ -1,12 +1,6 @@
-use std::{
-    cell::RefCell,
-    path::PathBuf,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::path::PathBuf;
 
 use clap::{builder::ValueParser, Arg, ArgAction, Command};
-use lazy_static::lazy_static;
 
 use util::{validator, VideoFormat};
 use video::{
@@ -67,17 +61,18 @@ fn main() {
         flip
     );
 
-    let decoder = gst::GstreamerDecoder::new().unwrap();
-    // decoder.build(DecoderOptions::default()).unwrap();
-    // decoder
-    //     .lock()
-    //     .unwrap()
-    //     .build(DecoderOptions {
-    //         width: width.copied(),
-    //         height: height.copied(),
-    //         invert,
-    //         flip,
-    //     })
-    //     .unwrap();
-    GstreamerDecoder::build(decoder.clone(), DecoderOptions::default()).unwrap();
+    // Why an Arc<Mutex> when we can't see any threads?
+    // Because Rust is paranoid.
+    // Somewhere in ::build, a closure is needed because the demuxer component can only be
+    // linked to the next element at "runtime", i.e. when the pipeline starts playing.
+    // So we register a callback for that, which implies a closure, which from Rust's point of
+    // view can be executed on any other thread, and supersede the decoder instance's lifetime too.
+    // Conceptually this scenario makes no sense but I can't defeat the compiler sooo, Arc<Mutex>
+    // to enforce thread safety and avoid lifetime headaches
+    let decoder_mutex = gst::GstreamerDecoder::new(infile.as_os_str().to_str().unwrap()).unwrap();
+    GstreamerDecoder::build(decoder_mutex.clone(), DecoderOptions::default()).unwrap();
+    // decoder.lock().unwrap().play().unwrap();
+    let mut lock = decoder_mutex.lock();
+    let decoder = lock.as_deref_mut().unwrap();
+    decoder.run().unwrap();
 }

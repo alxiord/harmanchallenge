@@ -1,11 +1,7 @@
-use std::cell::RefCell;
 use std::fmt::{self, Display};
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use gstreamer::prelude::{
-    Cast, ElementExt, ElementExtManual, GstBinExtManual, GstObjectExt, ObjectExt, PadExt,
-};
+use gstreamer::prelude::{ElementExt, ElementExtManual, GstBinExtManual, GstObjectExt, PadExt};
 use gstreamer::{glib, Element, ElementFactory, Pipeline};
 
 use crate::DecoderOptions;
@@ -16,6 +12,8 @@ use super::Error as VideoError;
 pub enum Error {
     Glib(glib::Error),
     GlibBool(glib::BoolError),
+    PipelineStateChange(gstreamer::StateChangeError),
+    Bus,
 }
 
 impl Display for Error {
@@ -23,6 +21,8 @@ impl Display for Error {
         match self {
             Error::Glib(e) => write!(f, "glib error: {}", e),
             Error::GlibBool(e) => write!(f, "glib bool error: {}", e),
+            Error::PipelineStateChange(e) => write!(f, "pipeline state change error: {}", e),
+            Error::Bus => write!(f, "pipeline without bus"),
         }
     }
 }
@@ -83,22 +83,24 @@ impl GstreamerDecoder {
         demux_src_pad: &gstreamer::Pad,
         next_elem: &gstreamer::Element, // decoder
     ) {
-        let next_elem_sink_pad = next_elem.static_pad("sink").unwrap();
-        if let Err(e) = demux_src_pad.link(&next_elem_sink_pad) {
-            eprintln!("Failed to link demux pad to decoder: {}", e);
-        } else {
-            println!("Successfully linked demux pad to decoder.");
-        }
+        // Sadly unwrap here, if the demuxer can't be linked to the next element,
+        // the pipeline is broken
+        let next_elem_sink_pad = next_elem
+            .static_pad("sink")
+            .expect("Can't create sink pad for demuxer");
+        demux_src_pad
+            .link(&next_elem_sink_pad)
+            .expect("Can't link demuxer to next element");
     }
 }
 
 impl super::Decoder for GstreamerDecoder {
-    fn new() -> Result<Arc<Mutex<Self>>, VideoError> {
+    fn new(infname: &str) -> Result<Arc<Mutex<Self>>, VideoError> {
         gstreamer::init().map_err(|e| VideoError::Gstreamer(Error::Glib(e)))?;
 
         let src: Element = ElementFactory::make("filesrc")
             .name("filesrc0")
-            .property("location", "input/hello.mp4")
+            .property("location", infname)
             .build()
             .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
 
@@ -117,7 +119,7 @@ impl super::Decoder for GstreamerDecoder {
 
     fn build(self_rc: Arc<Mutex<Self>>, opts: DecoderOptions) -> Result<(), VideoError> {
         let mut lock = self_rc.lock();
-        let decoder = lock.as_deref_mut().unwrap();
+        let decoder = lock.as_deref_mut().map_err(|_| VideoError::PoisonedLock)?;
 
         let hardcoded_mp4_input = Self::hardcode_mp4_input()?;
         decoder.steps.splice(1..1, hardcoded_mp4_input);
@@ -129,9 +131,16 @@ impl super::Decoder for GstreamerDecoder {
 
         for i in 0..decoder.steps.len() - 1 {
             if decoder.steps[i].name() == "demux" {
+                // Special handling for demux!!
+                // Why?
+                // Because as the name suggests it *demultiplexes* src into multiple streams,
+                // and the next element can't know what to link to unless explicitly shown.
+                //
+                // inspo:
+                // https://stackoverflow.com/a/65591800
+                // https://gitlab.freedesktop.org/gstreamer/gstreamer-rs/-/blob/0b1be1178918166a2e519d82f2935d68034ad046/examples/src/bin/transmux.rs
                 let next_elem = decoder.steps[i + 1].clone();
 
-                // Use glib::clone! macro for cleaner syntax and handling
                 decoder.steps[i].connect_pad_added(move |_demux, src_pad| {
                     // let self_clone = Rc::clone(&self_clone);
                     let next_elem = next_elem.clone();
@@ -148,36 +157,38 @@ impl super::Decoder for GstreamerDecoder {
             }
         }
 
-        decoder
-            .pipeline
-            .set_state(gstreamer::State::Playing)
-            .unwrap();
+        Ok(())
+    }
 
-        let bus = decoder
+    fn run(&mut self) -> Result<(), VideoError> {
+        self.pipeline
+            .set_state(gstreamer::State::Playing)
+            .map_err(|e| VideoError::Gstreamer(Error::PipelineStateChange(e)))?;
+
+        let bus = self
             .pipeline
             .bus()
-            .expect("Pipeline without bus. Shouldn't happen!");
+            .ok_or(VideoError::Gstreamer(Error::Bus))?;
 
         for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
             use gstreamer::MessageView;
 
             match msg.view() {
                 MessageView::Eos(..) => break,
-                MessageView::Error(err) => {
-                    eprintln!(
-                        "Error from {:?}: {} ({:?})",
-                        err.src().map(|s| s.path_string()),
-                        err.error(),
-                        err.debug()
-                    );
-                    decoder.pipeline.set_state(gstreamer::State::Null).unwrap();
+                MessageView::Error(_) => {
+                    self.pipeline
+                        .set_state(gstreamer::State::Null)
+                        .map_err(|e| VideoError::Gstreamer(Error::PipelineStateChange(e)))?;
+                    // todo log error
+                    break;
                 }
                 _ => (),
             }
         }
 
-        decoder.pipeline.set_state(gstreamer::State::Null).unwrap();
-
-        Ok(())
+        self.pipeline
+            .set_state(gstreamer::State::Null)
+            .map_err(|e| VideoError::Gstreamer(Error::PipelineStateChange(e)))
+            .map(|_| ())
     }
 }
