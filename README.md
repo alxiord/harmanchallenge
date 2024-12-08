@@ -77,6 +77,14 @@ ninja -C builddir
 WHATEVER GIVE UP
 ```
 
+### cmdline invocation
+
+Gotta fix these positional args...
+
+```bash
+cargo run --  -i input/hello.mp4 -w 600 -h 400 h264 true
+```
+
 ## Build with Docker
 
 ```bash

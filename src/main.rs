@@ -37,7 +37,11 @@ fn main() {
                 .value_parser(clap::value_parser!(i32))
                 .action(ArgAction::Set),
         )
-        .arg(Arg::new("invert"))
+        .arg(
+            Arg::new("invert")
+                .value_parser(clap::value_parser!(bool))
+                .action(ArgAction::Set),
+        )
         .arg(Arg::new("flip"))
         .disable_help_flag(true);
 
@@ -48,7 +52,7 @@ fn main() {
     let format = matches.get_one::<VideoFormat>("format").unwrap();
     let width = matches.get_one::<i32>("width");
     let height = matches.get_one::<i32>("height");
-    let invert = matches.contains_id("invert");
+    let invert = matches.get_one::<bool>("invert").unwrap_or(&false);
     let flip = matches.contains_id("flip");
 
     println!(
@@ -77,6 +81,7 @@ fn main() {
             opts.width_height = Some((*w, *h));
         }
     }
+    opts.invert = *invert;
 
     GstreamerDecoder::build(decoder_mutex.clone(), opts).unwrap();
     // decoder.lock().unwrap().play().unwrap();

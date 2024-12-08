@@ -1,8 +1,15 @@
 use std::fmt::{self, Display};
 use std::sync::{Arc, Mutex};
 
+use glib::object::ObjectExt;
 use gstreamer::prelude::{ElementExt, ElementExtManual, GstBinExtManual, GstObjectExt, PadExt};
+use gstreamer::prelude::{GObjectExtManualGst, ObjectType};
 use gstreamer::{glib, Element, ElementFactory, Pipeline};
+
+use glib::translate::ToGlibPtr;
+// use glib_sys::{guint, GValue};
+use gobject_sys::g_object_set_property;
+use gobject_sys::GValue;
 
 use crate::DecoderOptions;
 
@@ -88,6 +95,43 @@ impl GstreamerDecoder {
         Ok(vec![])
     }
 
+    fn apply_color_effect(invert: bool) -> Result<Vec<Element>, VideoError> {
+        if invert {
+            // https://gstreamer.freedesktop.org/documentation/coloreffects/coloreffects.html?gi-language=c
+            // Color-effects-preset
+            // The lookup table to use to convert input colors
+            // Members
+            // none (0) – Do nothing preset
+            // heat (1) – Fake heat camera toning
+            // sepia (2) – Sepia toning
+            // xray (3) – Invert and slightly shade to blue
+            // xpro (4) – Cross processing toning
+            // yellowblue (5) – Yellow foreground Blue background color filter
+            Ok(vec![
+                ElementFactory::make("coloreffects")
+                    .property_from_str("preset", "xray")
+                    .build()
+                    .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+                ElementFactory::make("videoconvert")
+                    .name("videoconvert1")
+                    .build()
+                    .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+                // ElementFactory::make("videoflip")
+                //     .name("videoflip0")
+                //     .property("method", "horizontal-flip")
+                //     .build()
+                //     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+
+                //     ElementFactory::make("xvimagesink")
+                //         .name("xvimagesink0")
+                //         .build()
+                //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ])
+        } else {
+            Ok(vec![])
+        }
+    }
+
     fn handle_demux_pad_added(
         demux_src_pad: &gstreamer::Pad,
         next_elem: &gstreamer::Element, // decoder
@@ -130,11 +174,17 @@ impl super::Decoder for GstreamerDecoder {
         let mut lock = self_rc.lock();
         let decoder = lock.as_deref_mut().map_err(|_| VideoError::PoisonedLock)?;
 
-        let extra_steps = Self::hardcode_mp4_input().and_then(|mut v| {
-            let change_res_steps = Self::change_res(opts.width_height)?;
-            v.extend(change_res_steps);
-            Ok(v)
-        })?;
+        let extra_steps = Self::hardcode_mp4_input()
+            .and_then(|mut v| {
+                let change_res_steps = Self::change_res(opts.width_height)?;
+                v.extend(change_res_steps);
+                Ok(v)
+            })
+            .and_then(|mut v| {
+                let invert_steps = Self::apply_color_effect(opts.invert)?;
+                v.extend(invert_steps);
+                Ok(v)
+            })?;
 
         decoder.steps.splice(1..1, extra_steps);
 
