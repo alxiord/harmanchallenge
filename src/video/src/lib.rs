@@ -21,8 +21,7 @@ impl Display for Error {
 
 #[derive(Clone, Copy, Debug)]
 pub struct DecoderOptions {
-    pub width: Option<u32>,
-    pub height: Option<u32>,
+    pub width_height: Option<(i32, i32)>,
     pub invert: bool,
     pub flip: bool,
 }
@@ -30,8 +29,7 @@ pub struct DecoderOptions {
 impl Default for DecoderOptions {
     fn default() -> Self {
         Self {
-            width: None,
-            height: None,
+            width_height: None,
             invert: false,
             flip: false,
         }

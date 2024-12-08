@@ -28,13 +28,13 @@ fn main() {
         .arg(
             Arg::new("width")
                 .short('w')
-                .value_parser(clap::value_parser!(u32))
+                .value_parser(clap::value_parser!(i32))
                 .action(ArgAction::Set),
         )
         .arg(
             Arg::new("height")
                 .short('h')
-                .value_parser(clap::value_parser!(u32))
+                .value_parser(clap::value_parser!(i32))
                 .action(ArgAction::Set),
         )
         .arg(Arg::new("invert"))
@@ -46,8 +46,8 @@ fn main() {
     // Safe to unwrap here - if some of the required args are missing, it doesn't make sense for the program to run
     let infile = matches.get_one::<PathBuf>("input").unwrap();
     let format = matches.get_one::<VideoFormat>("format").unwrap();
-    let width = matches.get_one::<u32>("width");
-    let height = matches.get_one::<u32>("height");
+    let width = matches.get_one::<i32>("width");
+    let height = matches.get_one::<i32>("height");
     let invert = matches.contains_id("invert");
     let flip = matches.contains_id("flip");
 
@@ -70,7 +70,15 @@ fn main() {
     // Conceptually this scenario makes no sense but I can't defeat the compiler sooo, Arc<Mutex>
     // to enforce thread safety and avoid lifetime headaches
     let decoder_mutex = gst::GstreamerDecoder::new(infile.as_os_str().to_str().unwrap()).unwrap();
-    GstreamerDecoder::build(decoder_mutex.clone(), DecoderOptions::default()).unwrap();
+
+    let mut opts = DecoderOptions::default();
+    if let Some(w) = width {
+        if let Some(h) = height {
+            opts.width_height = Some((*w, *h));
+        }
+    }
+
+    GstreamerDecoder::build(decoder_mutex.clone(), opts).unwrap();
     // decoder.lock().unwrap().play().unwrap();
     let mut lock = decoder_mutex.lock();
     let decoder = lock.as_deref_mut().unwrap();

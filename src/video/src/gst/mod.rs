@@ -47,36 +47,45 @@ impl GstreamerDecoder {
                 .name("videoconvert0")
                 .build()
                 .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            //     ElementFactory::make("coloreffects")
-            //         .name("coloreffects0")
-            //         .property("preset", 3u32) // preset=3 as per your working pipeline
-            //         .build()
-            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            //     ElementFactory::make("videoflip")
-            //         .name("videoflip0")
-            //         .property("method", "horizontal-flip")
-            //         .build()
-            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            //     ElementFactory::make("videoscale")
-            //         .name("videoscale0")
-            //         .build()
-            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            //     ElementFactory::make("capsfilter")
-            //         .name("capsfilter0")
-            //         .property(
-            //             "caps",
-            //             gstreamer::Caps::builder("video/x-raw")
-            //                 .field("width", 600i32)
-            //                 .field("height", 400i32)
-            //                 .build(),
-            //         )
-            //         .build()
-            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            // ElementFactory::make("coloreffects")
+            //     .name("coloreffects0")
+            //     .property("preset", 3u32) // preset=3 as per your working pipeline
+            //     .build()
+            //     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            // ElementFactory::make("videoflip")
+            //     .name("videoflip0")
+            //     .property("method", "horizontal-flip")
+            //     .build()
+            //     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+
             //     ElementFactory::make("xvimagesink")
             //         .name("xvimagesink0")
             //         .build()
             //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
         ])
+    }
+
+    fn change_res(opt_w_h: Option<(i32, i32)>) -> Result<Vec<Element>, VideoError> {
+        if let Some((w, h)) = opt_w_h {
+            return Ok(vec![
+                ElementFactory::make("videoscale")
+                    .name("videoscale0")
+                    .build()
+                    .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+                ElementFactory::make("capsfilter")
+                    .name("capsfilter0")
+                    .property(
+                        "caps",
+                        gstreamer::Caps::builder("video/x-raw")
+                            .field("width", w)
+                            .field("height", h)
+                            .build(),
+                    )
+                    .build()
+                    .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ]);
+        }
+        Ok(vec![])
     }
 
     fn handle_demux_pad_added(
@@ -121,8 +130,13 @@ impl super::Decoder for GstreamerDecoder {
         let mut lock = self_rc.lock();
         let decoder = lock.as_deref_mut().map_err(|_| VideoError::PoisonedLock)?;
 
-        let hardcoded_mp4_input = Self::hardcode_mp4_input()?;
-        decoder.steps.splice(1..1, hardcoded_mp4_input);
+        let extra_steps = Self::hardcode_mp4_input().and_then(|mut v| {
+            let change_res_steps = Self::change_res(opts.width_height)?;
+            v.extend(change_res_steps);
+            Ok(v)
+        })?;
+
+        decoder.steps.splice(1..1, extra_steps);
 
         decoder
             .pipeline
