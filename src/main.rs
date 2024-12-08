@@ -1,9 +1,18 @@
-use std::path::PathBuf;
+use std::{
+    cell::RefCell,
+    path::PathBuf,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use clap::{builder::ValueParser, Arg, ArgAction, Command};
+use lazy_static::lazy_static;
 
 use util::{validator, VideoFormat};
-use video::{gst, Decoder};
+use video::{
+    gst::{self, GstreamerDecoder},
+    Decoder, DecoderOptions,
+};
 
 fn main() {
     println!("Hello, world!");
@@ -59,5 +68,16 @@ fn main() {
     );
 
     let decoder = gst::GstreamerDecoder::new().unwrap();
-    decoder.borrow_mut().build().unwrap();
+    // decoder.build(DecoderOptions::default()).unwrap();
+    // decoder
+    //     .lock()
+    //     .unwrap()
+    //     .build(DecoderOptions {
+    //         width: width.copied(),
+    //         height: height.copied(),
+    //         invert,
+    //         flip,
+    //     })
+    //     .unwrap();
+    GstreamerDecoder::build(decoder.clone(), DecoderOptions::default()).unwrap();
 }

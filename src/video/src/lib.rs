@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::fmt::{self, Display};
+use std::sync::{Arc, Mutex};
 use std::{rc::Rc, result::Result};
 
 pub mod gst;
@@ -17,7 +18,26 @@ impl Display for Error {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct DecoderOptions {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub invert: bool,
+    pub flip: bool,
+}
+
+impl Default for DecoderOptions {
+    fn default() -> Self {
+        Self {
+            width: None,
+            height: None,
+            invert: false,
+            flip: false,
+        }
+    }
+}
+
 pub trait Decoder {
-    fn new() -> Result<Rc<RefCell<Self>>, Error>;
-    fn build(&mut self) -> Result<(), Error>;
+    fn new() -> Result<Arc<Mutex<Self>>, Error>;
+    fn build(self_rc: Arc<Mutex<Self>>, opts: DecoderOptions) -> Result<(), Error>;
 }

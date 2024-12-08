@@ -59,11 +59,29 @@ gst-launch-1.0 filesrc location=input/hello.mp4 ! qtdemux name=demux   demux.vid
 
 BUT - to add h264 encoding but **not** save to file: don't know how to do this
 
+### trying out videoinvert
+
+This plugin should exist in the gst-plugins-good package, but on my setup despite retrying loads of times
+it just doesn't show up. Let's build it.
+
+````bash
+git clone https://gitlab.freedesktop.org/gstreamer/gstreamer.git
+cd gstreamer/subprojects/gst-plugins-good
+git checkout 1.20.3
+
+sudo apt-get install build-essential meson ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+meson builddir
+ninja -C builddir
+
+WHATEVER GIVE UP
+```
+
 ## Build with Docker
 
 ```bash
 docker run -it -v $PWD:/home/alexandra harmanchallenge:v3 bash
-```
+````
 
 and inside the container
 

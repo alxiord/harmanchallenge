@@ -1,10 +1,14 @@
 use std::cell::RefCell;
 use std::fmt::{self, Display};
-use std::io::Sink;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
-use gstreamer::prelude::{Cast, ElementExt, ElementExtManual, GstBinExtManual};
+use gstreamer::prelude::{
+    Cast, ElementExt, ElementExtManual, GstBinExtManual, GstObjectExt, ObjectExt, PadExt,
+};
 use gstreamer::{glib, Element, ElementFactory, Pipeline};
+
+use crate::DecoderOptions;
 
 use super::Error as VideoError;
 
@@ -28,58 +32,128 @@ pub struct GstreamerDecoder {
     pipeline: Pipeline,
 }
 
-// cmd to successfully run the video w gstreamer:
-// gst-launch-1.0 -v filesrc location=input/hello.mp4 ! qtdemux ! h264parse ! avdec_h264 ! videoconvert ! xvimagesink
-// todo why do i need queue and videoconvert?
+impl GstreamerDecoder {
+    fn hardcode_mp4_input() -> Result<Vec<Element>, VideoError> {
+        Ok(vec![
+            ElementFactory::make("qtdemux")
+                .name("demux")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ElementFactory::make("avdec_h264")
+                .name("avdec_h264-0")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ElementFactory::make("videoconvert")
+                .name("videoconvert0")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            //     ElementFactory::make("coloreffects")
+            //         .name("coloreffects0")
+            //         .property("preset", 3u32) // preset=3 as per your working pipeline
+            //         .build()
+            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            //     ElementFactory::make("videoflip")
+            //         .name("videoflip0")
+            //         .property("method", "horizontal-flip")
+            //         .build()
+            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            //     ElementFactory::make("videoscale")
+            //         .name("videoscale0")
+            //         .build()
+            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            //     ElementFactory::make("capsfilter")
+            //         .name("capsfilter0")
+            //         .property(
+            //             "caps",
+            //             gstreamer::Caps::builder("video/x-raw")
+            //                 .field("width", 600i32)
+            //                 .field("height", 400i32)
+            //                 .build(),
+            //         )
+            //         .build()
+            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            //     ElementFactory::make("xvimagesink")
+            //         .name("xvimagesink0")
+            //         .build()
+            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+        ])
+    }
 
-// to FLIP:
-// ... videoflip method=horizontal-flip !  xvimagesink
+    fn handle_demux_pad_added(
+        demux_src_pad: &gstreamer::Pad,
+        next_elem: &gstreamer::Element, // decoder
+    ) {
+        let next_elem_sink_pad = next_elem.static_pad("sink").unwrap();
+        if let Err(e) = demux_src_pad.link(&next_elem_sink_pad) {
+            eprintln!("Failed to link demux pad to decoder: {}", e);
+        } else {
+            println!("Successfully linked demux pad to decoder.");
+        }
+    }
+}
 
 impl super::Decoder for GstreamerDecoder {
-    fn new() -> Result<Rc<RefCell<Self>>, VideoError> {
+    fn new() -> Result<Arc<Mutex<Self>>, VideoError> {
         gstreamer::init().map_err(|e| VideoError::Gstreamer(Error::Glib(e)))?;
 
         let src: Element = ElementFactory::make("filesrc")
-            .name("hc-inputfsrc")
+            .name("filesrc0")
+            .property("location", "input/hello.mp4")
             .build()
             .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
 
         let sink: Element = ElementFactory::make("xvimagesink")
-            .name("hc=outimgsink")
+            .name("xvimagesink0")
             .build()
             .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
 
         let pipeline = Pipeline::with_name("hc-pipeline");
 
-        Ok(Rc::new(RefCell::new(GstreamerDecoder {
-            steps: [src, sink].to_vec(),
+        Ok(Arc::new(Mutex::new(GstreamerDecoder {
+            steps: vec![src, sink],
             pipeline,
         })))
     }
 
-    fn build(&mut self) -> Result<(), VideoError> {
-        // self.pipeline
-        //     .add_many(self.steps.iter())
-        //     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
+    fn build(self_rc: Arc<Mutex<Self>>, opts: DecoderOptions) -> Result<(), VideoError> {
+        let mut lock = self_rc.lock();
+        let decoder = lock.as_deref_mut().unwrap();
 
-        // for i in 0..self.steps.len() - 1 {
-        //     self.steps[i]
-        //         .link(&self.steps[i + 1])
-        //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
-        // }
+        let hardcoded_mp4_input = Self::hardcode_mp4_input()?;
+        decoder.steps.splice(1..1, hardcoded_mp4_input);
 
-        // gst-launch-1.0 filesrc location=input/hello.mp4 ! \
-        //     qtdemux name=demux   demux.video_0 ! avdec_h264 ! videoconvert ! \
-        //     coloreffects preset=3 ! videoconvert ! \
-        //     videoscale ! video/x-raw,width=600,height=400 ! videoflip method=horizontal-flip ! xvimagesink
+        decoder
+            .pipeline
+            .add_many(decoder.steps.iter())
+            .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
 
-        self.pipeline = gstreamer::parse::launch(&format!(
-        "filesrc location=input/hello.mp4 ! qtdemux name=demux   demux.video_0 ! avdec_h264 ! videoconvert ! coloreffects preset=3 ! videoconvert ! videoscale ! video/x-raw,width=600,height=400 ! videoflip method=horizontal-flip ! xvimagesink"
-        )).unwrap().downcast::<Pipeline>().unwrap();
+        for i in 0..decoder.steps.len() - 1 {
+            if decoder.steps[i].name() == "demux" {
+                let next_elem = decoder.steps[i + 1].clone();
 
-        self.pipeline.set_state(gstreamer::State::Playing).unwrap();
+                // Use glib::clone! macro for cleaner syntax and handling
+                decoder.steps[i].connect_pad_added(move |_demux, src_pad| {
+                    // let self_clone = Rc::clone(&self_clone);
+                    let next_elem = next_elem.clone();
+                    GstreamerDecoder::handle_demux_pad_added(&src_pad, &next_elem);
+                });
 
-        let bus = self
+                decoder.steps[i]
+                    .sync_state_with_parent()
+                    .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
+            } else {
+                decoder.steps[i]
+                    .link(&decoder.steps[i + 1])
+                    .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
+            }
+        }
+
+        decoder
+            .pipeline
+            .set_state(gstreamer::State::Playing)
+            .unwrap();
+
+        let bus = decoder
             .pipeline
             .bus()
             .expect("Pipeline without bus. Shouldn't happen!");
@@ -90,13 +164,19 @@ impl super::Decoder for GstreamerDecoder {
             match msg.view() {
                 MessageView::Eos(..) => break,
                 MessageView::Error(err) => {
-                    self.pipeline.set_state(gstreamer::State::Null).unwrap();
+                    eprintln!(
+                        "Error from {:?}: {} ({:?})",
+                        err.src().map(|s| s.path_string()),
+                        err.error(),
+                        err.debug()
+                    );
+                    decoder.pipeline.set_state(gstreamer::State::Null).unwrap();
                 }
                 _ => (),
             }
         }
 
-        self.pipeline.set_state(gstreamer::State::Null).unwrap();
+        decoder.pipeline.set_state(gstreamer::State::Null).unwrap();
 
         Ok(())
     }
