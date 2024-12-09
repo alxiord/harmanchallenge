@@ -27,6 +27,40 @@ This project consists in a program with the following capabilities:
   architecture is easy to understand and it made it easy for me, knowing nothing about video manipulation, to
   conceptualize how filters can be chained together and what the information flow looks like.
 
+## Usage
+
+The Python script should hide away weird Docker and Rust implementation details.
+
+```bash
+python3 harmanchallenge.py build
+```
+
+This runs the docker container `aior/harmanchallenge:v3`, mounts the project directory as `/home/alexandra`,
+and inside it runs `cargo build --release` to build the project.
+
+```bash
+python3 harmanchallenge.py run --input=input/hello.mp4 [--width=600] [--height=400] [--format=h264] [--flip] [--invert]
+```
+
+This runs the built (release) binary with the specified args:
+
+- `--input`: path to the input video file (mp4 supported only)
+- `--width`: width in px of the output video (optional)
+- `--height`: height in px of the output video (optional)
+- `--format`: format for encoding the video before passing it to the screen sink (`h264` supported only) (optional)
+- `--flip`: flip the output video horizontally (optional)
+- `--invert`: invert colors on the output video (optional)
+
+**Note** that `--width` and `--height` need to be specified together; if either one is missing, the other
+is quietly ignored and the video is not resized.
+
+```bash
+python3 harmanchallenge.py doc
+```
+
+This runs the docker container `aior/harmanchallenge:v3`, mounts the project directory as `/home/alexandra`,
+inside it runs `cargo doc` to autogenerate the HTML documentation, then opens it in the default browser.
+
 ## Architecture Overview
 
 ### `video` crate
