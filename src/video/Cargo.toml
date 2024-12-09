@@ -13,3 +13,5 @@ gstreamer-video = "0.23.3"
 glib = "0.20.6"
 glib-sys = "0.20.6"
 gobject-sys = "0.15"
+
+util = { path = "../util"}

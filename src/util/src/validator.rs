@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use super::Error;
 
+/// Validates that the input file specifies exists and is readable
 pub fn parse_fname(fnamestr: &str) -> Result<PathBuf, Error> {
     let fname = PathBuf::from(fnamestr);
     if !fname.exists() || !fname.is_file() {
@@ -25,6 +26,9 @@ pub fn parse_fname(fnamestr: &str) -> Result<PathBuf, Error> {
     )))
 }
 
+/// Validates that the format specified is supported
+/// Currently the only supported format is h264.
+/// Case insensitive
 pub fn parse_format(format: &str) -> Result<super::VideoFormat, Error> {
     if format.eq_ignore_ascii_case("h264") {
         return Ok(super::VideoFormat::H264);

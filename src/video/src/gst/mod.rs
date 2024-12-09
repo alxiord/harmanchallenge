@@ -1,25 +1,23 @@
 use std::fmt::{self, Display};
 use std::sync::{Arc, Mutex};
 
-use glib::object::ObjectExt;
 use gstreamer::prelude::{ElementExt, ElementExtManual, GstBinExtManual, GstObjectExt, PadExt};
-use gstreamer::prelude::{GObjectExtManualGst, ObjectType};
 use gstreamer::{glib, Element, ElementFactory, Pipeline};
 
-use glib::translate::ToGlibPtr;
-// use glib_sys::{guint, GValue};
-use gobject_sys::g_object_set_property;
-use gobject_sys::GValue;
-
-use crate::DecoderOptions;
+use util::DecoderOptions;
 
 use super::Error as VideoError;
 
 #[derive(Debug)]
+/// Gstreamer errors
 pub enum Error {
+    /// glib error
     Glib(glib::Error),
+    /// glib error
     GlibBool(glib::BoolError),
+    /// Error occurred while changing the gstreamer pipeline state
     PipelineStateChange(gstreamer::StateChangeError),
+    /// gstreamer pipeline doesn't have a message bus
     Bus,
 }
 
@@ -34,12 +32,18 @@ impl Display for Error {
     }
 }
 
+/// Struct that implements the [`Decoder`](crate::Decoder) trait using gstreamer as a backend
 pub struct GstreamerDecoder {
     steps: Vec<Element>,
     pipeline: Pipeline,
 }
 
 impl GstreamerDecoder {
+    /// Create the first steps of the pipeline, hardcoded for parsing mp4 files:
+    /// 1. [demuxer](https://gstreamer.freedesktop.org/documentation/isomp4/qtdemux.html?gi-language=c) that splits the mp4 file into video and audio streams
+    /// 1. [`h264`` decoder](https://gstreamer.freedesktop.org/documentation/libav/avdec_h264.html?gi-language=c#avdec_h264-page) for the demux'ed video stream
+    /// 1. [video converter](https:/)/gstreamer.freedesktop.org/documentation/videoconvertscale/videoconvert.html?gi-language=c#videoconvert-page) to automatically convert the video stream into a format
+    ///    compatible with whatever comes next in the pipeline
     fn hardcode_mp4_input() -> Result<Vec<Element>, VideoError> {
         Ok(vec![
             ElementFactory::make("qtdemux")
@@ -54,13 +58,12 @@ impl GstreamerDecoder {
                 .name("videoconvert0")
                 .build()
                 .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            //     ElementFactory::make("xvimagesink")
-            //         .name("xvimagesink0")
-            //         .build()
-            //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
         ])
     }
 
+    /// Create steps for changing the width and height of the video:
+    /// 1. [`videoscale`](https://gstreamer.freedesktop.org/documentation/videoconvertscale/videoscale.html?gi-language=c#videoscale-page) for resizing the video frames
+    /// 1. [`capsfilter`](https://gstreamer.freedesktop.org/documentation/coreelements/capsfilter.html?gi-language=c#capsfilter-page) for specifying the desired width and height
     fn change_res(opt_w_h: Option<(i32, i32)>) -> Result<Vec<Element>, VideoError> {
         if let Some((w, h)) = opt_w_h {
             return Ok(vec![
@@ -84,6 +87,11 @@ impl GstreamerDecoder {
         Ok(vec![])
     }
 
+    /// Create steps for changing the color of the video (note that the filter used here, "xray",
+    /// adds a blue hue after inverting - `gstreamer` doesn't have a "just invert" filter):
+    /// 1. [`coloreffects`](https://gstreamer.freedesktop.org/documentation/coloreffects/coloreffects.html?gi-language=c) for applying the `xray` effect
+    /// 1. [video converter](https:/)/gstreamer.freedesktop.org/documentation/videoconvertscale/videoconvert.html?gi-language=c#videoconvert-page) to automatically convert the video stream into a format
+    ///    compatible with whatever comes next in the pipeline
     fn apply_color_effect(invert: bool) -> Result<Vec<Element>, VideoError> {
         if invert {
             // https://gstreamer.freedesktop.org/documentation/coloreffects/coloreffects.html?gi-language=c
@@ -111,6 +119,8 @@ impl GstreamerDecoder {
         }
     }
 
+    /// Create steps for flipping the video horizontally:
+    /// 1. [`videoflip`](https://gstreamer.freedesktop.org/documentation/videofilter/videoflip.html?gi-language=c)
     fn flip(flipflag: bool) -> Result<Vec<Element>, VideoError> {
         println!("GstreamerDecoder::flip: flipflag = {}", flipflag);
         if flipflag {
@@ -140,6 +150,10 @@ impl GstreamerDecoder {
         }
     }
 
+    /// Callback for linking the demuxer (dynamically) when the pipeline starts playing.
+    /// The [`qtdemux`](https://gstreamer.freedesktop.org/documentation/qtdemux/qtdemux.html?gi-language=c) element can't be
+    /// linked to the next element during pipeline creation, hence the need to register a callback
+    /// and handle it dynamically at "run"time.
     fn handle_demux_pad_added(
         demux_src_pad: &gstreamer::Pad,
         next_elem: &gstreamer::Element, // decoder
@@ -156,6 +170,7 @@ impl GstreamerDecoder {
 }
 
 impl super::Decoder for GstreamerDecoder {
+    /// Create the file source and sink elements that delimit the pipeline
     fn new(infname: &str) -> Result<Arc<Mutex<Self>>, VideoError> {
         gstreamer::init().map_err(|e| VideoError::Gstreamer(Error::Glib(e)))?;
 
@@ -178,6 +193,12 @@ impl super::Decoder for GstreamerDecoder {
         })))
     }
 
+    /// Build the gstreamer pipeline.
+    /// When all the supported filters are added, the pipeline looks like this:
+    ///
+    /// ```
+    /// {source} - {demuxer} - {avdec_h264} - {coloreffects} - {videoconvert} - {videoscale} - {capsfilter} - {videoflip} - {xvimgsink}
+    /// ```
     fn build(self_rc: Arc<Mutex<Self>>, opts: DecoderOptions) -> Result<(), VideoError> {
         let mut lock = self_rc.lock();
         let decoder = lock.as_deref_mut().map_err(|_| VideoError::PoisonedLock)?;
@@ -244,6 +265,7 @@ impl super::Decoder for GstreamerDecoder {
         Ok(())
     }
 
+    /// Play the pipeline (run the video through the filters and play it on the screen)
     fn run(&mut self) -> Result<(), VideoError> {
         self.pipeline
             .set_state(gstreamer::State::Playing)

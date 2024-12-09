@@ -24,6 +24,7 @@
 
 ```bash
 apt-get install libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-qt5 gstreamer1.0-pulseaudio
+
 ```
 
 Pipeline to just view the video:
@@ -79,10 +80,8 @@ WHATEVER GIVE UP
 
 ### cmdline invocation
 
-Gotta fix these positional args...
-
 ```bash
-cargo run --  -i input/hello.mp4 -w 600 -h 400 h264 true true
+cargo run -- --input=input/hello.mp4 --width=600 --height=400 --format=h264 --flip --invert
 ```
 
 ## Build with Docker

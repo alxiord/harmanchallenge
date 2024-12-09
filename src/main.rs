@@ -1,73 +1,54 @@
-use std::path::PathBuf;
+#![deny(missing_docs)]
 
-use clap::{builder::ValueParser, Arg, ArgAction, Command};
+//! # Harman coding challenge - video processor
+//!
+//! ## Usage
+//!
+//! ```bash
+//! cargo run -- --input=$INFILE [--width=$W] [--height=$H] [--format=$FORMAT] [--flip] [--invert]
+//! ```
+//!
+//! ## Example
+//!
+//! To build and run a pipeline that opens an mp4 file, resizes it to 640x480, flips it
+//! horizontally and inverts the colors, run:
+//!
+//! ```bash
+//! cargo run -- --input=input/hello.mp4 --width=640 --height=480 --format=h264 --flip --invert
+//! ```
+//!
+//! This is the equivalent of the following [`gstreamer`](https://gstreamer.freedesktop.org/) pipeline:
+//!
+//! ```bash
+//! gst-launch-1.0 filesrc location=input/hello.mp4 !   \
+//!     qtdemux name=demux demux.video_0 !              \
+//!     avdec_h264 ! videoconvert !                     \
+//!     coloreffects preset=3 ! videoconvert !          \
+//!     videoscale ! video/x-raw,width=600,height=400 ! \
+//!     videoflip method=horizontal-flip !              \
+//!     xvimagesink
+//! ```
+//!
+//! ## Links
+//!
+//! See also:
+//! * the [`README`](https://github.com/alxiord/harmanchallenge/blob/main/README.md)
+//! * the [`video`] documentation
 
-use util::{validator, VideoFormat};
+use std::borrow::Borrow;
+
+use util::{Cli, DecoderOptions};
 use video::{
     gst::{self, GstreamerDecoder},
-    Decoder, DecoderOptions,
+    Decoder,
 };
 
+use clap::Parser;
+
 fn main() {
-    println!("Hello, world!");
-
-    let cmd = Command::new("harmanchallenge")
-        .arg(
-            Arg::new("input")
-                .short('i')
-                .required(true)
-                .value_parser(ValueParser::new(validator::parse_fname))
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new("format")
-                .default_value("h264")
-                .value_parser(ValueParser::new(validator::parse_format))
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new("width")
-                .short('w')
-                .value_parser(clap::value_parser!(i32))
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new("height")
-                .short('h')
-                .value_parser(clap::value_parser!(i32))
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new("invert")
-                .value_parser(clap::value_parser!(bool))
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new("flip")
-                .value_parser(clap::value_parser!(bool))
-                .action(ArgAction::Set),
-        )
-        .disable_help_flag(true);
-
-    let matches = cmd.get_matches();
-
-    // Safe to unwrap here - if some of the required args are missing, it doesn't make sense for the program to run
-    let infile = matches.get_one::<PathBuf>("input").unwrap();
-    let format = matches.get_one::<VideoFormat>("format").unwrap();
-    let width = matches.get_one::<i32>("width");
-    let height = matches.get_one::<i32>("height");
-    let invert = matches.get_one::<bool>("invert").unwrap_or(&false);
-    let flip = matches.get_one::<bool>("flip").unwrap_or(&false);
-
-    println!(
-        "Input file: {:?}\nFormat: {}\nW: {:?} H: {:?}\nInvert {}\nFlip {}",
-        infile.as_os_str(),
-        format,
-        width,
-        height,
-        invert,
-        flip
-    );
+    let cli = Cli::parse();
+    let opts: DecoderOptions = cli.borrow().into();
+    println!("opts = {:?}", opts);
 
     // Why an Arc<Mutex> when we can't see any threads?
     // Because Rust is paranoid.
@@ -77,16 +58,8 @@ fn main() {
     // view can be executed on any other thread, and supersede the decoder instance's lifetime too.
     // Conceptually this scenario makes no sense but I can't defeat the compiler sooo, Arc<Mutex>
     // to enforce thread safety and avoid lifetime headaches
-    let decoder_mutex = gst::GstreamerDecoder::new(infile.as_os_str().to_str().unwrap()).unwrap();
-
-    let mut opts = DecoderOptions::default();
-    if let Some(w) = width {
-        if let Some(h) = height {
-            opts.width_height = Some((*w, *h));
-        }
-    }
-    opts.invert = *invert;
-    opts.flip = *flip;
+    let decoder_mutex =
+        gst::GstreamerDecoder::new(cli.input.as_os_str().to_str().unwrap()).unwrap();
 
     GstreamerDecoder::build(decoder_mutex.clone(), opts).unwrap();
     // decoder.lock().unwrap().play().unwrap();
