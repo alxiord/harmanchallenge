@@ -54,17 +54,6 @@ impl GstreamerDecoder {
                 .name("videoconvert0")
                 .build()
                 .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            // ElementFactory::make("coloreffects")
-            //     .name("coloreffects0")
-            //     .property("preset", 3u32) // preset=3 as per your working pipeline
-            //     .build()
-            //     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            // ElementFactory::make("videoflip")
-            //     .name("videoflip0")
-            //     .property("method", "horizontal-flip")
-            //     .build()
-            //     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-
             //     ElementFactory::make("xvimagesink")
             //         .name("xvimagesink0")
             //         .build()
@@ -116,17 +105,36 @@ impl GstreamerDecoder {
                     .name("videoconvert1")
                     .build()
                     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-                // ElementFactory::make("videoflip")
-                //     .name("videoflip0")
-                //     .property("method", "horizontal-flip")
-                //     .build()
-                //     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-
-                //     ElementFactory::make("xvimagesink")
-                //         .name("xvimagesink0")
-                //         .build()
-                //         .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
             ])
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    fn flip(flipflag: bool) -> Result<Vec<Element>, VideoError> {
+        println!("GstreamerDecoder::flip: flipflag = {}", flipflag);
+        if flipflag {
+            // https://gstreamer.freedesktop.org/documentation/videofilter/videoflip.html?gi-language=c
+            // method (deprecated, use video-direction instead)
+            //
+            // Default value : none (0)
+            //
+            // Members
+            // none (0) – Identity (no rotation)
+            // clockwise (1) – Rotate clockwise 90 degrees
+            // rotate-180 (2) – Rotate 180 degrees
+            // counterclockwise (3) – Rotate counter-clockwise 90 degrees
+            // horizontal-flip (4) – Flip horizontally
+            // vertical-flip (5) – Flip vertically
+            // upper-left-diagonal (6) – Flip across upper left/lower right diagonal
+            // upper-right-diagonal (7) – Flip across upper right/lower left diagonal
+            // automatic (8) – Select flip method based on image-orientation tag
+
+            Ok(vec![ElementFactory::make("videoflip")
+                .name("videoflip0")
+                .property_from_str("video-direction", "4")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?])
         } else {
             Ok(vec![])
         }
@@ -176,13 +184,19 @@ impl super::Decoder for GstreamerDecoder {
 
         let extra_steps = Self::hardcode_mp4_input()
             .and_then(|mut v| {
+                let invert_steps = Self::apply_color_effect(opts.invert)?;
+                v.extend(invert_steps);
+                Ok(v)
+            })
+            .and_then(|mut v| {
                 let change_res_steps = Self::change_res(opts.width_height)?;
                 v.extend(change_res_steps);
                 Ok(v)
             })
             .and_then(|mut v| {
-                let invert_steps = Self::apply_color_effect(opts.invert)?;
-                v.extend(invert_steps);
+                let flip_steps = Self::flip(opts.flip)?;
+                println!("{} flip steps", flip_steps.len());
+                v.extend(flip_steps);
                 Ok(v)
             })?;
 
@@ -194,6 +208,12 @@ impl super::Decoder for GstreamerDecoder {
             .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
 
         for i in 0..decoder.steps.len() - 1 {
+            println!(
+                "Linking {} with {}",
+                decoder.steps[i].name(),
+                decoder.steps[i + 1].name()
+            );
+
             if decoder.steps[i].name() == "demux" {
                 // Special handling for demux!!
                 // Why?

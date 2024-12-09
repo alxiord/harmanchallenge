@@ -82,7 +82,7 @@ WHATEVER GIVE UP
 Gotta fix these positional args...
 
 ```bash
-cargo run --  -i input/hello.mp4 -w 600 -h 400 h264 true
+cargo run --  -i input/hello.mp4 -w 600 -h 400 h264 true true
 ```
 
 ## Build with Docker

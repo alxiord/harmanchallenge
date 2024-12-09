@@ -42,7 +42,11 @@ fn main() {
                 .value_parser(clap::value_parser!(bool))
                 .action(ArgAction::Set),
         )
-        .arg(Arg::new("flip"))
+        .arg(
+            Arg::new("flip")
+                .value_parser(clap::value_parser!(bool))
+                .action(ArgAction::Set),
+        )
         .disable_help_flag(true);
 
     let matches = cmd.get_matches();
@@ -53,7 +57,7 @@ fn main() {
     let width = matches.get_one::<i32>("width");
     let height = matches.get_one::<i32>("height");
     let invert = matches.get_one::<bool>("invert").unwrap_or(&false);
-    let flip = matches.contains_id("flip");
+    let flip = matches.get_one::<bool>("flip").unwrap_or(&false);
 
     println!(
         "Input file: {:?}\nFormat: {}\nW: {:?} H: {:?}\nInvert {}\nFlip {}",
@@ -82,6 +86,7 @@ fn main() {
         }
     }
     opts.invert = *invert;
+    opts.flip = *flip;
 
     GstreamerDecoder::build(decoder_mutex.clone(), opts).unwrap();
     // decoder.lock().unwrap().play().unwrap();
