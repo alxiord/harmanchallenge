@@ -48,7 +48,6 @@ use clap::Parser;
 fn main() {
     let cli = Cli::parse();
     let opts: DecoderOptions = cli.borrow().into();
-    println!("opts = {:?}", opts);
 
     // Why an Arc<Mutex> when we can't see any threads?
     // Because Rust is paranoid.
@@ -62,7 +61,7 @@ fn main() {
         gst::GstreamerDecoder::new(cli.input.as_os_str().to_str().unwrap()).unwrap();
 
     GstreamerDecoder::build(decoder_mutex.clone(), opts).unwrap();
-    // decoder.lock().unwrap().play().unwrap();
+
     let mut lock = decoder_mutex.lock();
     let decoder = lock.as_deref_mut().unwrap();
     decoder.run().unwrap();

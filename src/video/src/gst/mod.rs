@@ -122,7 +122,6 @@ impl GstreamerDecoder {
     /// Create steps for flipping the video horizontally:
     /// 1. [`videoflip`](https://gstreamer.freedesktop.org/documentation/videofilter/videoflip.html?gi-language=c)
     fn flip(flipflag: bool) -> Result<Vec<Element>, VideoError> {
-        println!("GstreamerDecoder::flip: flipflag = {}", flipflag);
         if flipflag {
             // https://gstreamer.freedesktop.org/documentation/videofilter/videoflip.html?gi-language=c
             // method (deprecated, use video-direction instead)
