@@ -23,8 +23,8 @@ This project consists in a program with the following capabilities:
 - Why Rust: it's the compiled language I'm most comfortable with
 - Why Docker: so you don't have to install the Rust toolchain and the `gstreamer` libraries
 - Why Python: because the `cargo` commands can be tricky when unfamiliar with Rust, so a more friendly wrapper was needed
-- Why `gstreamer`: after briefly considering `gstreamer` and `ffmped`, I chose the latter because the pipeline
-  architecture is easy to understand and it made it easy for me, knowing nothing about vide manipulation, to
+- Why `gstreamer`: after briefly considering `gstreamer` and `ffmpeg`, I chose the latter because the pipeline
+  architecture is easy to understand and it made it easy for me, knowing nothing about video manipulation, to
   conceptualize how filters can be chained together and what the information flow looks like.
 
 ## Architecture Overview
