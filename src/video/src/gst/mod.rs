@@ -69,6 +69,26 @@ impl GstreamerDecoder {
         ])
     }
 
+    fn webcamsource() -> Result<Vec<Element>, VideoError> {
+        // v4l2src ! videoconvert !
+        Ok(vec![
+            ElementFactory::make("v4l2src")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ElementFactory::make("videoconvert")
+                .name("videoconvert0")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+        ])
+    }
+
+    fn source(input: VideoInput) -> Result<Vec<Element>, VideoError> {
+        match input {
+            VideoInput::File(fname) => Self::filesource(fname),
+            VideoInput::Webcam => Self::webcamsource(),
+        }
+    }
+
     /// Create steps for changing the width and height of the video:
     /// 1. [`videoscale`](https://gstreamer.freedesktop.org/documentation/videoconvertscale/videoscale.html?gi-language=c#videoscale-page) for resizing the video frames
     /// 1. [`capsfilter`](https://gstreamer.freedesktop.org/documentation/coreelements/capsfilter.html?gi-language=c#capsfilter-page) for specifying the desired width and height
@@ -174,6 +194,23 @@ impl GstreamerDecoder {
         }
     }
 
+    fn screenout() -> Result<Vec<Element>, VideoError> {
+        Ok(vec![
+            ElementFactory::make("avdec_h264")
+                .name("avdec_h2641")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ElementFactory::make("videoconvert")
+                .name("videoconvert2") // todo: keep a map
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ElementFactory::make("xvimagesink")
+                .name("xvimagesink0")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+        ])
+    }
+
     /// Callback for linking the demuxer (dynamically) when the pipeline starts playing.
     /// The [`qtdemux`](https://gstreamer.freedesktop.org/documentation/qtdemux/qtdemux.html?gi-language=c) element can't be
     /// linked to the next element during pipeline creation, hence the need to register a callback
@@ -196,35 +233,12 @@ impl GstreamerDecoder {
 impl super::Decoder for GstreamerDecoder {
     /// Create the file source and sink elements that delimit the pipeline
     fn new(input: VideoInput) -> Result<Arc<Mutex<Self>>, VideoError> {
-        let infname = match input {
-            VideoInput::File(fname) => fname,
-            _ => "input/hello.mp4".to_string(),
-        };
-
         gstreamer::init().map_err(|e| VideoError::Gstreamer(Error::Glib(e)))?;
 
-        let srcsteps: Vec<Element> = Self::filesource(infname)?;
-        let sinksteps: Vec<Element> = vec![
-            ElementFactory::make("avdec_h264")
-                .name("avdec_h2641")
-                .build()
-                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            ElementFactory::make("videoconvert")
-                .name("videoconvert2") // todo: keep a map
-                .build()
-                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-            ElementFactory::make("xvimagesink")
-                .name("xvimagesink0")
-                .build()
-                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
-        ];
-
-        let pipeline = Pipeline::with_name("hc-pipeline");
-
         Ok(Arc::new(Mutex::new(GstreamerDecoder {
-            srcsteps,
-            sinksteps,
-            pipeline,
+            srcsteps: Self::source(input)?,
+            sinksteps: Self::screenout()?,
+            pipeline: Pipeline::with_name("hc-pipeline"),
         })))
     }
 
