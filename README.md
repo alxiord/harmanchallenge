@@ -122,6 +122,11 @@ The following elements are added to the pipeline:
     this decodes the video stream assuming `h264` encoding
   - [`videoconvert`](https://gstreamer.freedesktop.org/documentation/videoconvert/index.html?gi-language=c#videoconvert-page):
     this autoconverts the video stream to something compatible with the next element in the pipeline
+- OR webcam input handling:
+  - [`v4l2src`](https://gstreamer.freedesktop.org/documentation/video4linux2/v4l2src.html?gi-language=c):
+    this reads the video from the webcam and passes it on to the filters
+  - [`videoconvert`](https://gstreamer.freedesktop.org/documentation/videoconvert/index.html?gi-language=c#videoconvert-page):
+    this autoconverts the video stream to something compatible with the next element in the pipeline
 - color inversion - **optional**:
   - [`coloreffects`](https://gstreamer.freedesktop.org/documentation/coloreffects/index.html?gi-language=c#coloreffects-page):
     this applies a color filter using a predefined preset on the video stream. To invert the colors, the `xray` preset is used, which is not quite exactly what requested but close enough. More details in the [#Appendix](#Appendix).
@@ -134,7 +139,16 @@ The following elements are added to the pipeline:
   - [`videoflip`](https://gstreamer.freedesktop.org/documentation/videofilter/videoflip.html?gi-language=c):
     this plugin flips the video stream with a predefined preset for direction. According to the official documentation,
     preset 4 is for horizontal flipping.
-- sink:
+- `h264` encoding:
+  - [`x264enc`](https://gstreamer.freedesktop.org/documentation/x264/index.html?gi-language=c#x264enc-page):
+    encodes the video stream
+    - `tune=zerolatency` works around inherent latencies induced by non-trivial pipelines
+  - [`queue`](https://gstreamer.freedesktop.org/documentation/coreelements/queue.html?gi-language=c#queue-page):
+    manages how many frames can be enqueued in the buffer while passing the stream to the next element
+- sink: avdec_h264 ! videoconvert
+  - [`avdec_h264](https://gstreamer.freedesktop.org/documentation/libav/avdec_h264.html?gi-language=c#avdec_h264-page):
+    this decodes the just-encoded stream for passing it on to the sink
+  - [`videoconvert`](https://gstreamer.freedesktop.org/documentation/videoconvert/index.html?gi-language=c#videoconvert-page)
   - [`xvimagesink`](https://gstreamer.freedesktop.org/documentation/xvimagesink/index.html?gi-language=c#xvimagesink-page):
     this renders the resulting frames on the screen using the xvideo extension.
 

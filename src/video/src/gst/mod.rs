@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use gstreamer::prelude::{ElementExt, ElementExtManual, GstBinExtManual, GstObjectExt, PadExt};
 use gstreamer::{glib, Element, ElementFactory, Pipeline};
 
-use util::DecoderOptions;
+use util::{DecoderOptions, VideoFormat};
 
 use crate::VideoInput;
 
@@ -36,18 +36,24 @@ impl Display for Error {
 
 /// Struct that implements the [`Decoder`](crate::Decoder) trait using gstreamer as a backend
 pub struct GstreamerDecoder {
-    steps: Vec<Element>,
+    srcsteps: Vec<Element>,
+    sinksteps: Vec<Element>,
     pipeline: Pipeline,
 }
 
 impl GstreamerDecoder {
     /// Create the first steps of the pipeline, hardcoded for parsing mp4 files:
+    /// 1. [filesrc](https://gstreamer.freedesktop.org/documentation/coreelements/filesrc.html?gi-language=c)
     /// 1. [demuxer](https://gstreamer.freedesktop.org/documentation/isomp4/qtdemux.html?gi-language=c) that splits the mp4 file into video and audio streams
     /// 1. [`h264`` decoder](https://gstreamer.freedesktop.org/documentation/libav/avdec_h264.html?gi-language=c#avdec_h264-page) for the demux'ed video stream
     /// 1. [video converter](https:/)/gstreamer.freedesktop.org/documentation/videoconvertscale/videoconvert.html?gi-language=c#videoconvert-page) to automatically convert the video stream into a format
     ///    compatible with whatever comes next in the pipeline
-    fn hardcode_mp4_input() -> Result<Vec<Element>, VideoError> {
+    fn filesource(infname: String) -> Result<Vec<Element>, VideoError> {
         Ok(vec![
+            ElementFactory::make("filesrc")
+                .property_from_str("location", infname.as_str())
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
             ElementFactory::make("qtdemux")
                 .name("demux")
                 .build()
@@ -151,6 +157,23 @@ impl GstreamerDecoder {
         }
     }
 
+    fn encode(format: VideoFormat) -> Result<Vec<Element>, VideoError> {
+        //   x264enc tune=zerolatency ! queue ! avdec_h264 ! videoconvert !
+        match format {
+            VideoFormat::H264 => Ok(vec![
+                ElementFactory::make("x264enc")
+                    .name("x264enc0")
+                    .property_from_str("tune", "zerolatency")
+                    .build()
+                    .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+                ElementFactory::make("queue")
+                    .name("queue0")
+                    .build()
+                    .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ]),
+        }
+    }
+
     /// Callback for linking the demuxer (dynamically) when the pipeline starts playing.
     /// The [`qtdemux`](https://gstreamer.freedesktop.org/documentation/qtdemux/qtdemux.html?gi-language=c) element can't be
     /// linked to the next element during pipeline creation, hence the need to register a callback
@@ -180,21 +203,27 @@ impl super::Decoder for GstreamerDecoder {
 
         gstreamer::init().map_err(|e| VideoError::Gstreamer(Error::Glib(e)))?;
 
-        let src: Element = ElementFactory::make("filesrc")
-            .name("filesrc0")
-            .property("location", infname.as_str())
-            .build()
-            .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
-
-        let sink: Element = ElementFactory::make("xvimagesink")
-            .name("xvimagesink0")
-            .build()
-            .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
+        let srcsteps: Vec<Element> = Self::filesource(infname)?;
+        let sinksteps: Vec<Element> = vec![
+            ElementFactory::make("avdec_h264")
+                .name("avdec_h2641")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ElementFactory::make("videoconvert")
+                .name("videoconvert2") // todo: keep a map
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+            ElementFactory::make("xvimagesink")
+                .name("xvimagesink0")
+                .build()
+                .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?,
+        ];
 
         let pipeline = Pipeline::with_name("hc-pipeline");
 
         Ok(Arc::new(Mutex::new(GstreamerDecoder {
-            steps: vec![src, sink],
+            srcsteps,
+            sinksteps,
             pipeline,
         })))
     }
@@ -203,45 +232,46 @@ impl super::Decoder for GstreamerDecoder {
     /// When all the supported filters are added, the pipeline looks like this:
     ///
     /// ```
-    /// {source} - {demuxer} - {avdec_h264} - {coloreffects} - {videoconvert} - {videoscale} - {capsfilter} - {videoflip} - {xvimgsink}
+    /// {source} - {coloreffects} - {videoconvert} - {videoscale} - {capsfilter} - {videoflip} - {encode} {xvimgsink}
     /// ```
     fn build(self_rc: Arc<Mutex<Self>>, opts: DecoderOptions) -> Result<(), VideoError> {
         let mut lock = self_rc.lock();
         let decoder = lock.as_deref_mut().map_err(|_| VideoError::PoisonedLock)?;
 
-        let extra_steps = Self::hardcode_mp4_input()
+        let filter_steps = Self::apply_color_effect(opts.invert)
             .and_then(|mut v| {
-                let invert_steps = Self::apply_color_effect(opts.invert)?;
-                v.extend(invert_steps);
-                Ok(v)
-            })
-            .and_then(|mut v| {
-                let change_res_steps = Self::change_res(opts.width_height)?;
-                v.extend(change_res_steps);
+                let resize_steps = Self::change_res(opts.width_height)?;
+                v.extend(resize_steps);
                 Ok(v)
             })
             .and_then(|mut v| {
                 let flip_steps = Self::flip(opts.flip)?;
-                println!("{} flip steps", flip_steps.len());
                 v.extend(flip_steps);
+                Ok(v)
+            })
+            .and_then(|mut v| {
+                let encode_steps = Self::encode(opts.format)?;
+                v.extend(encode_steps);
                 Ok(v)
             })?;
 
-        decoder.steps.splice(1..1, extra_steps);
+        let mut all_steps: Vec<Element> = decoder.srcsteps.clone();
+        all_steps.extend(filter_steps);
+        all_steps.extend(decoder.sinksteps.clone());
 
         decoder
             .pipeline
-            .add_many(decoder.steps.iter())
+            .add_many(all_steps.iter())
             .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
 
-        for i in 0..decoder.steps.len() - 1 {
+        for i in 0..all_steps.len() - 1 {
             println!(
                 "Linking {} with {}",
-                decoder.steps[i].name(),
-                decoder.steps[i + 1].name()
+                all_steps[i].name(),
+                all_steps[i + 1].name()
             );
 
-            if decoder.steps[i].name() == "demux" {
+            if all_steps[i].name() == "demux" {
                 // Special handling for demux!!
                 // Why?
                 // Because as the name suggests it *demultiplexes* src into multiple streams,
@@ -250,20 +280,20 @@ impl super::Decoder for GstreamerDecoder {
                 // inspo:
                 // https://stackoverflow.com/a/65591800
                 // https://gitlab.freedesktop.org/gstreamer/gstreamer-rs/-/blob/0b1be1178918166a2e519d82f2935d68034ad046/examples/src/bin/transmux.rs
-                let next_elem = decoder.steps[i + 1].clone();
+                let next_elem = all_steps[i + 1].clone();
 
-                decoder.steps[i].connect_pad_added(move |_demux, src_pad| {
+                all_steps[i].connect_pad_added(move |_demux, src_pad| {
                     // let self_clone = Rc::clone(&self_clone);
                     let next_elem = next_elem.clone();
                     GstreamerDecoder::handle_demux_pad_added(&src_pad, &next_elem);
                 });
 
-                decoder.steps[i]
+                all_steps[i]
                     .sync_state_with_parent()
                     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
             } else {
-                decoder.steps[i]
-                    .link(&decoder.steps[i + 1])
+                all_steps[i]
+                    .link(&all_steps[i + 1])
                     .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
             }
         }

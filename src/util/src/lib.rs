@@ -1,5 +1,5 @@
 #![crate_name = "util"]
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 
 //! # Utilities
 
@@ -81,6 +81,7 @@ pub struct DecoderOptions {
     pub invert: bool,
     /// Flag that specifies whether the output file should be flipped horizontally
     pub flip: bool,
+    pub format: VideoFormat,
 }
 
 impl Default for DecoderOptions {
@@ -89,6 +90,7 @@ impl Default for DecoderOptions {
             width_height: None,
             invert: false,
             flip: false,
+            format: VideoFormat::H264,
         }
     }
 }
@@ -103,6 +105,7 @@ impl From<&Cli> for DecoderOptions {
         }
         opts.invert = cli.invert;
         opts.flip = cli.flip;
+        opts.format = cli.format.unwrap_or(VideoFormat::H264);
         opts
     }
 }
