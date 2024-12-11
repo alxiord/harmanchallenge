@@ -172,7 +172,12 @@ Moreover, the Docker image already has them preinstalled.
 Pipeline to just view the video:
 
 ```bash
-gst-launch-1.0 -v filesrc location=input/hello.mp4 ! qtdemux ! h264parse ! avdec_h264 ! videoconvert ! xvimagesink
+gst-launch-1.0 -v filesrc location=input/hello.mp4 !    \
+  qtdemux !                                             \
+  h264parse !                                           \
+  avdec_h264 !                                          \
+  videoconvert !                                        \
+  xvimagesink
 ```
 
 Or, letting `gstreamer` figure it out for themselves:
@@ -190,14 +195,46 @@ To flip:
 To invert (xray actually):
 
 ```bash
-gst-launch-1.0 filesrc location=input/hello.mp4 ! qtdemux name=demux demux.video_0 ! avdec_h264 ! videoconvert ! coloreffects preset=3 ! videoconvert ! videoflip method=horizontal-flip ! xvimagesink
+gst-launch-1.0 filesrc location=input/hello.mp4 !                 \
+  qtdemux name=demux demux.video_0 ! avdec_h264 ! videoconvert !  \
+  coloreffects preset=3 ! videoconvert !                          \
+  videoflip method=horizontal-flip !                              \
+  xvimagesink
 ```
 
 To resize:
 
 ```bash
-gst-launch-1.0 filesrc location=input/hello.mp4 ! qtdemux name=demux   demux.video_0 ! avdec_h264 ! videoconvert ! coloreffects preset=3 ! videoconvert ! videoscale ! video/x-raw,width=600,height=400 ! videoflip method=horizontal-flip ! xvimagesink
+gst-launch-1.0 filesrc location=input/hello.mp4 !                 \
+  qtdemux name=demux demux.video_0 ! avdec_h264 ! videoconvert !  \
+  coloreffects preset=3 ! videoconvert !                          \
+  videoscale ! video/x-raw,width=600,height=400 !                 \
+  videoflip method=horizontal-flip !                              \
+  xvimagesink
 ```
+
+The same, but using webcam input instead of a file, and encoding to h264:
+
+```bash
+gst-launch-1.0 v4l2src ! videoconvert !           \
+  coloreffects preset=xray !                      \
+  videoscale ! video/x-raw,width=640,height=480 ! \
+  videoflip method=horizontal-flip !              \
+  videoconvert ! video/x-raw,format=I420 !        \
+  x264enc tune=zerolatency !                      \
+  queue ! avdec_h264 ! videoconvert !             \
+  xvimagesink
+```
+
+<!-- gst-launch-1.0 filesrc location=input/hello.mp4 !                 \
+  qtdemux name=demux demux.video_0 ! avdec_h264 ! videoconvert !  \
+  coloreffects preset=3 ! videoconvert !                          \
+  videoscale ! video/x-raw,width=600,height=400 !                 \
+  videoflip method=horizontal-flip !                              \
+    videoconvert ! video/x-raw,format=I420 !        \
+  x264enc tune=zerolatency !                      \
+  queue ! avdec_h264 ! videoconvert !             \
+  xvimagesink -->
 
 BUT - to add h264 encoding but **not** save to file: don't know how to do this
 

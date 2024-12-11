@@ -54,7 +54,7 @@ impl error::Error for Error {}
 pub struct Cli {
     #[arg(long, value_parser = validator::parse_fname)]
     /// Input video file
-    pub input: PathBuf,
+    pub input: Option<PathBuf>,
     #[arg(long, value_parser = validator::parse_format)]
     /// Output video format
     format: Option<VideoFormat>,

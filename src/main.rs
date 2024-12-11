@@ -40,7 +40,7 @@ use std::borrow::Borrow;
 use util::{Cli, DecoderOptions};
 use video::{
     gst::{self, GstreamerDecoder},
-    Decoder,
+    Decoder, VideoInput,
 };
 
 use clap::Parser;
@@ -48,6 +48,11 @@ use clap::Parser;
 fn main() {
     let cli = Cli::parse();
     let opts: DecoderOptions = cli.borrow().into();
+
+    let insrc: VideoInput = match cli.input {
+        Some(path) => VideoInput::File(path.as_path().to_string_lossy().to_string()),
+        None => VideoInput::Webcam,
+    };
 
     // Why an Arc<Mutex> when we can't see any threads?
     // Because Rust is paranoid.
@@ -57,8 +62,7 @@ fn main() {
     // view can be executed on any other thread, and supersede the decoder instance's lifetime too.
     // Conceptually this scenario makes no sense but I can't defeat the compiler sooo, Arc<Mutex>
     // to enforce thread safety and avoid lifetime headaches
-    let decoder_mutex =
-        gst::GstreamerDecoder::new(cli.input.as_os_str().to_str().unwrap()).unwrap();
+    let decoder_mutex = gst::GstreamerDecoder::new(insrc).unwrap();
 
     GstreamerDecoder::build(decoder_mutex.clone(), opts).unwrap();
 

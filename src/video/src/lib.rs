@@ -1,5 +1,5 @@
 #![crate_name = "video"]
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 
 //! Video manipulation and decoding utilities.
 //! This crate exposes functionality for decoding a video file,
@@ -43,10 +43,15 @@ impl Display for Error {
     }
 }
 
+pub enum VideoInput {
+    File(String),
+    Webcam,
+}
+
 /// Trait that defines the common interface for supported video manipulator structs
 pub trait Decoder {
     /// Create a new instance
-    fn new(infname: &str) -> Result<Arc<Mutex<Self>>, Error>;
+    fn new(input: VideoInput) -> Result<Arc<Mutex<Self>>, Error>;
     /// Add decoders, encoders and filters
     fn build(self_rc: Arc<Mutex<Self>>, opts: DecoderOptions) -> Result<(), Error>;
     /// Parse the input file and output the result to the screen

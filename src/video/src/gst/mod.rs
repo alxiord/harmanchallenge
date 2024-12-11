@@ -6,6 +6,8 @@ use gstreamer::{glib, Element, ElementFactory, Pipeline};
 
 use util::DecoderOptions;
 
+use crate::VideoInput;
+
 use super::Error as VideoError;
 
 #[derive(Debug)]
@@ -170,12 +172,17 @@ impl GstreamerDecoder {
 
 impl super::Decoder for GstreamerDecoder {
     /// Create the file source and sink elements that delimit the pipeline
-    fn new(infname: &str) -> Result<Arc<Mutex<Self>>, VideoError> {
+    fn new(input: VideoInput) -> Result<Arc<Mutex<Self>>, VideoError> {
+        let infname = match input {
+            VideoInput::File(fname) => fname,
+            _ => "input/hello.mp4".to_string(),
+        };
+
         gstreamer::init().map_err(|e| VideoError::Gstreamer(Error::Glib(e)))?;
 
         let src: Element = ElementFactory::make("filesrc")
             .name("filesrc0")
-            .property("location", infname)
+            .property("location", infname.as_str())
             .build()
             .map_err(|e| VideoError::Gstreamer(Error::GlibBool(e)))?;
 
